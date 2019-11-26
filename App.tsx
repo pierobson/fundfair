@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { Alert, StyleSheet, Text, View, TouchableOpacity, Image, TouchableWithoutFeedback, Keyboard, AsyncStorage, ScrollView, RefreshControl, Modal, TextInput } from 'react-native';
+import { Linking, Alert, StyleSheet, Text, View, TouchableOpacity, Image, TouchableWithoutFeedback, Keyboard, AsyncStorage, ScrollView, RefreshControl, Modal, TextInput } from 'react-native';
 import PurchaseInput from './components/PurchaseInput';
+import qs from 'qs';
 
 function wait(timeout) {
   return new Promise(resolve => {
@@ -9,6 +10,14 @@ function wait(timeout) {
 }
 
 var purchases = [];
+
+function getPurchases() {
+  let s = 'cost,label,category\n';
+  purchases.forEach(e => {
+    s += e.cost + ',' + e.label + ',' + e.cat + '\n';
+  });
+  return s;
+}
 
 export default function App() {
 
@@ -19,6 +28,7 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [email, setEmail] = useState('')
 
   var color_ratio = balance / allowance;
   var red = color_ratio > 1/2 ? Math.floor(255 - (255 * color_ratio)) * 2 : 255;
@@ -43,6 +53,10 @@ export default function App() {
       if (p !== null) {
         purchases = JSON.parse(p);
       }
+      const e = await AsyncStorage.getItem('@Fundfair:email');
+      if (e !== null) {
+        setEmail(e);
+      }
     } catch (error) {
       console.log(error);
     }
@@ -54,6 +68,7 @@ export default function App() {
       await AsyncStorage.setItem('@Fundfair:allowance', allowance.toString());
       await AsyncStorage.setItem('@Fundfair:reset', allowanceReset.toString());
       await AsyncStorage.setItem('@Fundfair:purchases', JSON.stringify(purchases));
+      await AsyncStorage.setItem('@Fundfair:email', email);
     } catch (error) {
       console.log(error);
     }
@@ -135,6 +150,36 @@ export default function App() {
     _setStateAsync()
   };
 
+  let sendEmail = async () => {
+    var url = 'mailto:' + email;
+
+    const query = qs.stringify({
+        subject: 'Purchase History',
+        body: getPurchases(),
+        cc: '',
+        bcc: ''
+    });
+
+    if (query.length) {
+        url += `?${query}`;
+    }
+
+    const canOpen = await Linking.canOpenURL(url);
+
+    if (!canOpen) {
+        throw new Error('Provided URL can not be handled');
+    }
+
+    return Linking.openURL(url);
+  };
+
+  let updateAllowance = (x) => {
+    if (balance == allowance) {
+      setBalance(x);
+    } 
+    setAllowance(x);
+  };
+
   let section =  (
   
     <View>
@@ -191,8 +236,21 @@ export default function App() {
                 <View style={styles.form}>
                   <View style={styles.setting}>
                       <Text style={styles.settingText}>Allowance:</Text>
-                      <TextInput style={styles.settingInput} placeholder={allowance.toString()} keyboardType='numeric' onChangeText={text => {setAllowance(parseInt(text))}}/>
+                      <TextInput style={{...styles.settingInput, width: 80}} placeholder={allowance.toString()} keyboardType='numeric' onChangeText={text => {updateAllowance(parseInt(text))}}/>
                   </View>
+
+                  <View style={styles.setting}>
+                      <Text style={styles.settingText}>Email:</Text>
+                      <TextInput style={{...styles.settingInput, width: 140}} placeholder={email} onChangeText={text => {setEmail(text)}}/>
+                  </View>
+
+
+                  <TouchableOpacity onPress={sendEmail}>
+                    <View style={styles.getInfo}>
+                        <Text style={styles.settingText}>Get Info</Text>
+                    </View>
+                  </TouchableOpacity>
+
                 </View>
               </View>
 
@@ -259,8 +317,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center', 
   },
   lilWrap: {
-    height: '30%',
-    width: 200,
+    height: '40%',
+    width: 250,
     alignSelf: 'center',
     alignContent: 'center',
     justifyContent: 'center',
@@ -279,11 +337,16 @@ const styles = StyleSheet.create({
   setting: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     height: 50,
     borderRadius: 4,
     backgroundColor: '#666',
     margin: 4,
+    marginLeft: 15,
+    marginRight: 15,
+    padding: 10,
+    paddingTop: 5,
+    paddingBottom: 5,
   },
   settingText: {
     fontSize: 16,
@@ -293,6 +356,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#888',
     padding: 10,
     borderRadius: 4,
+  },
+  getInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    height: 50,
+    borderRadius: 4,
+    backgroundColor: 'green',
+    margin: 4,
+    marginLeft: 15,
+    marginRight: 15,
   },
   modal: {
     flex: 1,
